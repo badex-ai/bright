@@ -1,0 +1,21 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+.env
+
+# OS files
+.DS_Store
+
+# IDEs
+.vscode/
+.idea/
+
+# Pydantic cache (if using)
+__pydantic__/ 
+
+# Logs
+*.log
