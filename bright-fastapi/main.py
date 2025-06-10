@@ -6,8 +6,10 @@ from dotenv import load_dotenv
 from langchain_anthropic import ChatAnthropic
 from langgraph.graph import StateGraph, END
 from pydantic import BaseModel, Field, ConfigDict
-from typing import List, Optional
+from typing import List, Optional, Annotated, Sequence
 from langgraph.prebuilt import create_react_agent
+from langchain_core.messages import BaseMessage, HumanMessage
+from langgraph.graph.message import add_messages
 from mcp_server2 import setup_mcp_connection
 from langchain_core.prompts import ChatPromptTemplate
 from fastapi import FastAPI, HTTPException
@@ -47,12 +49,14 @@ class SearchResponse(BaseModel):
 class SearchRequest(BaseModel):
     query: str
 
+# Updated state model to work with LangGraph message pattern
 class ScrapeProcessState(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     
     user_query: str
     optimized_query: Optional[str] = None
     mcp_tools: List = Field(default_factory=list)
+    messages: Annotated[Sequence[BaseMessage], add_messages] = Field(default_factory=list)
     scraped_data: Optional[str] = None
     parsed_products: List[ProductData] = Field(default_factory=list)
     error_message: Optional[str] = None
@@ -71,7 +75,7 @@ async def load_tools_node(state: ScrapeProcessState) -> dict:
         # Use the official load_mcp_tools function
         mcp_tools = await setup_mcp_connection()
         
-        print(f"✅ Loaded {len(mcp_tools)} MCP tools")
+        print(f"✅ Loaded {len(mcp_tools)} tools")
         for tool in mcp_tools:
             print(f"  - {tool.name}: {tool.description}")
         
@@ -105,28 +109,30 @@ async def scrape_with_tools_node(state: ScrapeProcessState) -> dict:
             return {"error_message": "No MCP tools available for scraping"}
         
         # Create agent with the loaded tools
-        agent = create_react_agent(
-            llm,  # Use the initialized LLM instead of model string
-            state.mcp_tools
-        )
+        agent = create_react_agent(llm, state.mcp_tools)
 
         # Use the optimized query or original query
         query_to_use = state.optimized_query or state.user_query
         
-        response = await agent.ainvoke(
-            {"messages": [{"role": "user", "content": f"Search for Nike shoes: {query_to_use}"}]}
-        )
+        # Create initial message for the agent
+        initial_messages = [HumanMessage(content=f"Search for Nike shoes: {query_to_use}")]
+        
+        # Run the agent
+        response = await agent.ainvoke({"messages": initial_messages})
 
-        # Extract the content from the response
-        if hasattr(response, 'content'):
-            scraped_content = response.content
-        elif isinstance(response, dict) and 'messages' in response:
-            # Get the last message content
-            last_message = response['messages'][-1]
-            scraped_content = last_message.get('content', str(response))
+        # Extract the content from the final AI message
+        if "messages" in response and response["messages"]:
+            # Get the last message from the agent
+            last_message = response["messages"][-1]
+            # Extract content from the AI message
+            if hasattr(last_message, 'content'):
+                scraped_content = last_message.content
+            else:
+                scraped_content = str(last_message)
         else:
-            scraped_content = str(response)
+            scraped_content = "No response from agent"
 
+        print(f"📄 Scraped content preview: {scraped_content[:200]}...")
         return {"scraped_data": scraped_content}
         
     except Exception as e:
@@ -158,7 +164,7 @@ async def parse_data_node(state: ScrapeProcessState) -> dict:
     Scraped data:
     {state.scraped_data}"""
 
-        result = await llm.ainvoke([{"role": "user", "content": parse_prompt}])
+        result = await llm.ainvoke([HumanMessage(content=parse_prompt)])
         
         # Parse the JSON response
         import json
@@ -172,7 +178,16 @@ async def parse_data_node(state: ScrapeProcessState) -> dict:
             lines = response_content.split('\n')
             response_content = '\n'.join(lines[1:-1]).strip()
         
-        parsed_data = json.loads(response_content)
+        try:
+            parsed_data = json.loads(response_content)
+        except json.JSONDecodeError:
+            # If JSON parsing fails, try to extract JSON from the response
+            import re
+            json_match = re.search(r'\[.*\]', response_content, re.DOTALL)
+            if json_match:
+                parsed_data = json.loads(json_match.group())
+            else:
+                raise ValueError("Could not extract valid JSON from response")
         
         # Convert to ProductData objects
         products = []
@@ -184,6 +199,7 @@ async def parse_data_node(state: ScrapeProcessState) -> dict:
                 print(f"⚠️ Failed to parse product {item}: {e}")
                 continue
         
+        print(f"✅ Successfully parsed {len(products)} products")
         return {"parsed_products": products}
         
     except Exception as e:
@@ -194,13 +210,13 @@ async def parse_data_node(state: ScrapeProcessState) -> dict:
 # Fixed conditional edge functions
 def should_continue_after_load_tools(state: ScrapeProcessState) -> str:
     """Check if we should continue after loading tools"""
-    if state.error_message:
+    if hasattr(state, 'error_message') and state.error_message:
         return "END"
     return "scrape_with_tools"
 
 def should_continue_after_scraping(state: ScrapeProcessState) -> str:
     """Check if we should continue after scraping"""
-    if state.error_message:
+    if hasattr(state, 'error_message') and state.error_message:
         return "END"
     return "parse_data"
 
@@ -237,7 +253,7 @@ async def run_scraping(query: str):
     initial_state = ScrapeProcessState(user_query=query)
     result = await langgraph_app.ainvoke(initial_state)
     
-    if result.error_message:
+    if hasattr(result, 'error_message') and result.error_message:
         print(f"❌ Error: {result.error_message}")
         return None
     else:
@@ -252,12 +268,13 @@ async def search_nike_shoes(request: SearchRequest):
     
     try:
         # Execute the async LangGraph workflow
-        final_state: ScrapeProcessState = await langgraph_app.ainvoke(initial_state)
+        final_state = await langgraph_app.ainvoke(initial_state)
         
-        if final_state.error_message:
+        # Check for errors properly
+        if hasattr(final_state, 'error_message') and final_state.error_message:
             raise HTTPException(status_code=500, detail=f"Scraping or parsing failed: {final_state.error_message}")
         
-        if not final_state.parsed_products:
+        if not hasattr(final_state, 'parsed_products') or not final_state.parsed_products:
             raise HTTPException(status_code=404, detail="No products found. The page might not contain product data or the scraping failed.")
 
         return SearchResponse(products=final_state.parsed_products)
