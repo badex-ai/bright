@@ -47,7 +47,7 @@ async def connect_to_mcp() -> Tuple[AsyncExitStack, ClientSession]:
 async def process_query(session: ClientSession, query: str) -> str:
     """Send a query to the MCP server and return a response."""
     response = await session.run_tool(
-        tool_name="your_tool_name_here",  # <-- replace this
+        tool_name="scrape_as_markdown",  # <-- replace this
         input={"query": query}
     )
     return response.output
