@@ -111,27 +111,9 @@ export default function Home() {
               <p className="text-gray-600 text-center">No products found for your query.</p>
             )}
 
-            {results.analysis_summary && (
-              <div className="mt-8">
-                <h2 className="text-2xl font-semibold text-gray-700 mb-4">
-                  Analysis Summary
-                </h2>
-                <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">{results.analysis_summary}</p>
-              </div>
-            )}
+          
 
-            {results.analysis_chart_base64 && (
-              <div className="mt-8">
-                <h2 className="text-2xl font-semibold text-gray-700 mb-4">
-                  Analysis Chart
-                </h2>
-                <img
-                  src={`data:image/png;base64,${results.analysis_chart_base64}`}
-                  alt="Analysis Chart"
-                  className="max-w-full h-auto mx-auto border border-gray-300 rounded-md"
-                />
-              </div>
-            )}
+         
           </div>
         )}
       </div>
