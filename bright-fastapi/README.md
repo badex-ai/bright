@@ -1,192 +1,180 @@
-# Nike Shoe Scraper API
+# FastAPI Application with LangGraph and MCP
 
-A sophisticated web scraping system that uses AI agents to extract Nike shoe product data from nike.com. The system combines LangChain, LangGraph, Anthropic's Claude AI, and Bright Data's MCP (Model Context Protocol) server to create an intelligent scraping pipeline.
+A FastAPI application that leverages LangGraph for workflow orchestration and MCP (Model Context Protocol) adapters for intelligent data processing with Anthropic's Claude.
 
-##  Architecture Overview
+## 🚀 Features
 
-The system uses a multi-stage workflow orchestrated by LangGraph:
+- **FastAPI**: Modern, fast web framework for building APIs
+- **LangGraph**: Workflow orchestration for complex AI applications
+- **MCP Integration**: Model Context Protocol adapters for seamless tool integration
+- **Anthropic Claude**: Advanced AI capabilities for data processing
+- **Async Support**: Full asynchronous operation for better performance
 
-```
-User Query → Load MCP Tools → Scrape with AI Agent → Parse Data → Return Products
-```
+## 📋 Prerequisites
 
-## 🔧 Core Components
+- Python 3.8 or higher
+- pip (Python package installer)
+- An Anthropic API key
 
-### 1. **FastAPI Web Server** (`app`)
-- Provides REST API endpoint at `/search`
-- Handles CORS for frontend integration
-- Accepts search queries and returns structured product data
+## 🛠️ Installation & Setup
 
-### 2. **LangGraph Workflow** (`langgraph_app`)
-A state machine that orchestrates the scraping process through these nodes:
-
-#### **Load Tools Node** (`load_tools_node`)
-- Initializes connection to Bright Data MCP server
-- Loads web scraping tools using the official MCP adapter
-- Returns available tools for the AI agent
-
-#### **Scrape with Tools Node** (`scrape_with_tools_node`)
-- Creates a ReAct (Reasoning + Acting) agent using Claude AI
-- Instructs the agent to scrape the specific Nike URL: `https://www.nike.com/w/mens-shoes-nik1zy7ok`
-- Uses `scrape_as_markdown` tool to extract page content
-- Focuses on extracting product names, prices, URLs, and images
-
-#### **Parse Data Node** (`parse_data_node`)
-- Uses Claude AI to parse the raw scraped markdown content
-- Converts unstructured data into structured JSON
-- Extracts and validates product URLs (handles partial URLs and markdown links)
-- Creates `ProductData` objects with proper validation
-
-### 3. **MCP Connection Setup** (`mcp_server.py`)
-- Establishes connection to Bright Data's MCP server
-- Configures the Web Unlocker zone for bypassing anti-bot protection
-- Uses stdio transport for communication with the MCP server
-
-## 📊 Data Models
-
-### **ProductData**
-```python
-{
-    "name": str,           # Product name
-    "price": str,          # Price (e.g., "$120.00")
-    "currency": str,       # Always "USD"
-    "availability": str,   # "In Stock", "Out of Stock", or "Limited"
-    "product_url": str,    # Direct Nike product URL
-    "image_url": str       # Product image URL (optional)
-}
-```
-
-### **ScrapeProcessState**
-Tracks the workflow state through each processing step:
-- `user_query`: Original search query
-- `optimized_query`: AI-optimized query for scraping
-- `mcp_tools`: Available MCP tools
-- `messages`: LangGraph message chain
-- `scraped_data`: Raw scraped content
-- `parsed_products`: Final structured products
-- `error_message`: Any errors encountered
-
-##  How It Works
-
-### 1. **Request Processing**
-```python
-POST /search
-{
-    "query": "nike air max shoes"
-}
-```
-
-### 2. **Tool Loading**
-- Connects to Bright Data MCP server using environment credentials
-- Loads web scraping capabilities through the MCP protocol
-- Validates connection and available tools
-
-### 3. **AI-Powered Scraping**
-- Creates a ReAct agent with Claude AI and MCP tools
-- Agent receives specific instructions to:
-  - Use ONLY the `scrape_as_markdown` tool
-  - Target the exact Nike mens shoes URL
-  - Extract product information systematically
-  - Focus on complete URL extraction
-
-### 4. **Intelligent Parsing**
-- Claude AI analyzes the scraped markdown content
-- Identifies product information using pattern recognition
-- Handles various URL formats:
-  - Complete URLs: `https://www.nike.com/t/product-name/code`
-  - Markdown links: `[Product Name](URL)`
-  - Partial URLs: `/t/product-path` → converted to full URLs
-  - Reference-style markdown links
-
-### 5. **Response Formatting**
-- Validates all extracted data
-- Creates structured `ProductData` objects
-- Returns JSON response with product array
-
-##  Environment Variables
+### 1. Clone the Repository
 
 ```bash
-ANTHROPIC_API_KEY=your_claude_api_key
-BRIGHTDATA_API_TOKEN=your_brightdata_token
+git clone <your-repository-url>
+cd <your-project-directory>
 ```
 
-## 🛠️ Key Features
+### 2. Create a Virtual Environment
 
-### **Anti-Bot Protection**
-- Uses Bright Data's Web Unlocker to bypass Nike's bot detection
-- MCP protocol provides reliable access to protected content
-
-### **AI-Driven Extraction**
-- Claude AI understands context and extracts relevant product data
-- Handles dynamic content and various page layouts
-- Intelligent URL completion and validation
-
-### **Error Handling**
-- Comprehensive error catching at each workflow stage
-- Graceful degradation when tools or parsing fail
-- Detailed logging for debugging
-
-### **Structured Workflow**
-- LangGraph ensures proper execution order
-- State management tracks progress through each step
-- Conditional edges handle error scenarios
-
-## URL Extraction Intelligence
-
-The system is particularly sophisticated in URL extraction:
-
-1. **Markdown Link Detection**: Finds `[text](url)` patterns
-2. **Embedded URL Scanning**: Searches entire content for Nike URLs
-3. **Partial URL Completion**: Converts `/t/product` to full URLs
-4. **Product Code Matching**: Links product codes to their URLs
-5. **Contextual Association**: Matches product names with nearby URLs
-
-##  API Usage
-
-### Request
+**On Windows:**
 ```bash
-curl -X POST http://localhost:8000/search \
-  -H "Content-Type: application/json" \
-  -d '{"query": "running shoes"}'
+python -m venv venv
+venv\Scripts\activate
 ```
 
-### Response Format
-```json
-{
-    "products": [
-        {
-            "name": "Nike Air Max DN8",
-            "price": "$120.00",
-            "currency": "USD",
-            "availability": "In Stock",
-            "product_url": "https://www.nike.com/t/air-max-dn8-mens-shoes/FQ7860-010",
-            "image_url": "https://static.nike.com/..."
-        }
-    ]
-}
+**On macOS/Linux:**
+```bash
+python3 -m venv venv
+source venv/bin/activate
 ```
 
-## 🔍 Troubleshooting
+### 3. Install Dependencies
 
-### Common Issues:
-1. **MCP Connection Fails**: Check `BRIGHTDATA_API_TOKEN` environment variable
-2. **Parsing Errors**: Check Claude AI API key and quota
-3. **Tool Loading Issues**: Ensure MCP server dependencies are installed
+```bash
+pip install -r requirements.txt
+```
 
-### Debug Logging:
-The system provides detailed console output for each stage:
-- 🔧 Tool initialization
-- 🔍 Scraping progress  
-- 📄 Content extraction
-- 📊 Data parsing
-- ✅ Success confirmations
-- ❌ Error details
+### 4. Environment Configuration
 
-##  Running the System
+Create a `.env` file in the root directory and add your environment variables:
 
-1. Install dependencies
-2. Set environment variables
-3. Start FastAPI server: `uvicorn main:app --reload`
-4. Send POST requests to `/search` endpoint
+```env
+ANTHROPIC_API_KEY=
+BRIGHTDATA_API_TOKEN=""
+BRIGHTDATA_WEB_UNLOCKER_ZONE="mcp_unlocker" # e.g., mcp_unlocker
+BRIGHTDATA_SCRAPING_BROWSER_AUTH=""  
+```
 
-The system will automatically handle the complete scraping pipeline and return structured Nike shoe data.
+**To get BrightMcP key:**
+
+1. Visit the mcp website create an account
+2. Create an API Token and 
+3. Creata a scrapping browser auth
+
+
+**To get your Anthropic API key:**
+1. Sign up at [Anthropic Console](https://console.anthropic.com/)
+2. Navigate to API Keys section
+3. Create a new API key
+4. Copy and paste it into your `.env` file
+
+##  Running the Application
+
+### Development Mode
+
+```bash
+uvicorn main:app --reload
+```
+
+## 📁 Project Structure
+
+```
+project/
+├── main.py              # FastAPI application entry point
+├── requirements.txt     # Python dependencies
+├── .env                # Environment variables (create this)
+├── .mcp_server.py       # mcp server
+├── README.md           # This file
+└── ...
+```
+
+##  Requirements.txt
+
+```txt
+fastapi
+uvicorn
+python-dotenv
+langgraph
+langchain-mcp-adapters
+langchain-anthropic
+```
+
+##  Package Overview
+
+- **FastAPI**: Web framework for building APIs with automatic OpenAPI documentation
+- **Uvicorn**: ASGI server for running FastAPI applications
+- **python-dotenv**: Load environment variables from .env files
+- **LangGraph**: Graph-based workflow orchestration for AI applications
+- **langchain-mcp-adapters**: Adapters for Model Context Protocol integration
+- **langchain-anthropic**: LangChain integration with Anthropic's Claude models
+
+## API Endpoint
+
+```bash
+ http://localhost:8000/search
+
+```
+
+## 🚨 Troubleshooting
+
+### Common Issues
+
+**1. Module Not Found Error**
+```bash
+# Make sure virtual environment is activated
+source venv/bin/activate  # macOS/Linux
+# or
+venv\Scripts\activate     # Windows
+
+# Reinstall dependencies
+pip install -r requirements.txt
+```
+
+**3. Port Already in Use**
+```bash
+# Use a different port
+uvicorn main:app --reload --port 8001
+```
+
+### Virtual Environment Commands
+
+**Activate virtual environment:**
+```bash
+# Windows
+venv\Scripts\activate
+
+# macOS/Linux
+source venv/bin/activate
+```
+
+
+**Remove virtual environment:**
+```bash
+# Windows
+rmdir /s venv
+
+# macOS/Linux
+rm -rf venv
+```
+
+### Code Structure
+
+The application follows FastAPI best practices:
+- Async/await for non-blocking operations
+- Pydantic models for request/response validation
+- Proper error handling and HTTP status codes
+- Environment-based configuration
+
+
+
+
+
+##  Support
+
+For issues and questions:
+- Check the [FastAPI documentation](https://fastapi.tiangolo.com/)
+- Review [LangGraph documentation](https://langchain-ai.github.io/langgraph/)
+- Consult [Anthropic API documentation](https://docs.anthropic.com/)
+
+---
