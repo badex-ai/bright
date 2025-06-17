@@ -1,5 +1,4 @@
 # Correct imports based on the official documentation
-from mcp.client.stdio import stdio_client
 import asyncio
 import os
 from dotenv import load_dotenv
@@ -10,7 +9,7 @@ from typing import List, Optional, Annotated, Sequence
 from langgraph.prebuilt import create_react_agent
 from langchain_core.messages import BaseMessage, HumanMessage
 from langgraph.graph.message import add_messages
-from mcp_server2 import setup_mcp_connection
+from mcp_server import setup_mcp_connection
 from langchain_core.prompts import ChatPromptTemplate
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -76,8 +75,7 @@ async def load_tools_node(state: ScrapeProcessState) -> dict:
         mcp_tools = await setup_mcp_connection()
         
         print(f"✅ Loaded {len(mcp_tools)} tools")
-        for tool in mcp_tools:
-            print(f"  - {tool.name}: {tool.description}")
+      
         
         return {"mcp_tools": mcp_tools}
         
@@ -104,42 +102,37 @@ async def optimize_query_node(state: ScrapeProcessState) -> dict:
 async def scrape_with_tools_node(state: ScrapeProcessState) -> dict:
     print("🔍 Scraping with MCP tools...")
     try:
-        # Check if we have tools loaded
         if not state.mcp_tools:
             return {"error_message": "No MCP tools available for scraping"}
 
-        # Create agent with the loaded tools
         agent = create_react_agent(llm, state.mcp_tools)
-
-        # Use the optimized query or original query
         query_to_use = state.optimized_query or state.user_query
 
-        # Create much more specific instructions to prevent exploration
         initial_messages = [
             HumanMessage(
                 content=(
                     f"IMPORTANT: Use ONLY the scrape_as_markdown tool to scrape this EXACT URL: "
                     f"https://www.nike.com/w/mens-shoes-nik1zy7ok\n\n"
-                    f"Do NOT use any search tools. Do NOT scrape multiple pages. "
-                    f"Just scrape the provided URL once and extract all the Nike men's shoe products "
-                    f"that match this query: {query_to_use}\n\n"
-                    f"Return the scraped markdown content directly."
+                    f"CRITICAL REQUIREMENTS:\n"
+                    f"1. Do NOT use any search tools or scrape multiple pages\n"
+                    f"2. Focus on extracting these elements for each product:\n"
+                    f"   - Product name\n"
+                    f"   - Price\n"
+                    f"   - FULL product URL (look for href attributes containing '/t/' or full nike.com URLs)\n"
+                    f"   - Image URLs if available\n\n"
+                    f"3. When you find a product link, include the COMPLETE URL\n"
+                    f"4. If you see partial URLs starting with '/t/', convert them to full URLs by adding 'https://www.nike.com'\n\n"
+                    f"Query to match: {query_to_use}\n\n"
+                    f"Return the complete scraped markdown content including all URLs and links found."
                 )
             )
         ]
 
-        # Run the agent
         response = await agent.ainvoke({"messages": initial_messages})
 
-        # Extract the content from the final AI message
         if "messages" in response and response["messages"]:
-            # Get the last message from the agent
             last_message = response["messages"][-1]
-            # Extract content from the AI message
-            if hasattr(last_message, 'content'):
-                scraped_content = last_message.content
-            else:
-                scraped_content = str(last_message)
+            scraped_content = last_message.content if hasattr(last_message, 'content') else str(last_message)
         else:
             scraped_content = "No response from agent"
 
@@ -151,6 +144,7 @@ async def scrape_with_tools_node(state: ScrapeProcessState) -> dict:
         print(f"❌ {error_msg}")
         return {"error_message": error_msg}
 
+
 async def parse_data_node(state: ScrapeProcessState) -> dict:
     """Parse the scraped data into structured products"""
     print("📊 Parsing scraped data...")
@@ -159,18 +153,55 @@ async def parse_data_node(state: ScrapeProcessState) -> dict:
         return {"error_message": "No scraped data to parse"}
     
     try:
-        # Use Claude to structure the data
+        # Use Claude to structure the data with enhanced URL detection
         parse_prompt = f"""Parse the following scraped Nike shoe data into a JSON array of products.
-        
-        Each product should have:
-        - name: Product name
-        - price: Price as string
-        - currency: "USD" 
-        - availability: "In Stock", "Out of Stock", or "Limited"
-        - product_url: Direct link to product page
-        - image_url: Product image URL (if available)
 
-        Only include products that have a clear name and price. Include ALL shoes mentioned in the data.
+        CRITICAL INSTRUCTIONS FOR URL EXTRACTION:
+        
+        The scraped data appears to be in MARKDOWN format. Look carefully for:
+        
+        1. **Direct URLs**: Look for any complete URLs like:
+           - https://www.nike.com/t/[product-name]/[product-code]
+           - https://www.nike.com/t/[shoe-name]-[gender]-shoes-[identifier]/[style-code]
+        
+        2. **Markdown Links**: Look for markdown link format like:
+           - [Product Name](https://www.nike.com/t/...)
+           - [Link text](/t/product-url)
+        
+        3. **Embedded URLs**: Search the entire content for any strings containing:
+           - "/t/" followed by product identifiers
+           - "nike.com" URLs
+           - Product codes like "HF1553-003", "FQ7860-010", "DR2615-107"
+        
+        4. **Link References**: Look for reference-style markdown links at the bottom of the content
+        
+        5. **Partial URLs**: If you find partial URLs like "/t/air-max-...", convert to full URLs with "https://www.nike.com"
+        
+        6. **NO URL GENERATION**: If NO actual URLs are found in the scraped data, use "https://www.nike.com" as fallback
+        
+        7. **Contextual Matching**: Try to match product names with any URLs found nearby in the text
+
+        Each product should have:
+        - name: Product name (exactly as it appears)
+        - price: Price as string (e.g., "$120.00")
+        - currency: "USD" 
+        - availability: "In Stock", "Out of Stock", or "Limited" (determine from scraped data)
+        - product_url: ACTUAL direct link extracted from scraped data (or https://www.nike.com if none found)
+        - image_url: Product image URL (if available in scraped data)
+
+        MARKDOWN URL EXAMPLES to look for:
+        - [Nike Air Max DN8](https://www.nike.com/t/air-max-dn8-mens-shoes-YPsmAOxu/FQ7860-010)
+        - https://www.nike.com/t/zoom-vomero-5-mens-shoes-MgsTqZ/HF1553-003
+        - /t/invincible-3-mens-road-running-shoes-6MqQ72/DR2615-107
+
+        IMPORTANT:
+        - Scan the ENTIRE scraped content for ANY URLs or links
+        - Pay special attention to markdown link syntax [text](url)
+        - Look for URLs that might be split across lines
+        - If the data is truly just text with no URLs, all products will fallback to https://www.nike.com
+        - Only include products that have a clear name and price
+        - Include ALL shoes mentioned in the data
+
         Return ONLY a JSON array, no other text.
 
         Scraped content:
@@ -196,12 +227,12 @@ async def parse_data_node(state: ScrapeProcessState) -> dict:
         for item in parsed_data:
             # Ensure all required fields are present
             product_data = {
-                "name": item.get("name", ""),
-                "price": item.get("price", "$0"),
+                "name": item.get("name", "") or "",
+                "price": item.get("price", "$0") or "$0",
                 "currency": "USD",
-                "availability": item.get("availability", "In Stock"),
-                "product_url": item.get("product_url", "https://www.nike.com"),
-                "image_url": item.get("image_url", "")
+                "availability": item.get("availability", "In Stock") or "In Stock",
+                "product_url": item.get("product_url", "https://www.nike.com") or "https://www.nike.com",
+                "image_url": item.get("image_url", "") or ""
             }
             
             # Only add products with valid names and prices
@@ -269,52 +300,6 @@ async def run_scraping(query: str):
         print(f"✅ Found {len(result.parsed_products)} products")
         return result.parsed_products
 
-# @app.post("/search", response_model=SearchResponse)
-# async def search_nike_shoes(request: SearchRequest):
-#     print(f"Received request for query: {request.query}")
-    
-#     initial_state = ScrapeProcessState(user_query=request.query)
-    
-#     try:
-#         # Execute the async LangGraph workflow
-#         final_state = await langgraph_app.ainvoke(initial_state)
-        
-#         # Check for errors first
-#         if hasattr(final_state, 'error_message') and final_state.error_message:
-#             raise HTTPException(status_code=500, detail=f"Scraping or parsing failed: {final_state.error_message}")
-
-#         # Access parsed_products from the final state
-#         if hasattr(final_state, 'parsed_products'):
-#             products = final_state.['parsed_products']
-#             print(f"Found {len(products)} products in final state")
-            
-#             # Validate products format
-#             if products and isinstance(products, list):
-#                 # Convert products to the expected format if needed
-#                 formatted_products = [
-#                     ProductData(
-#                         name=p.name,
-#                         price=p.price,
-#                         currency=p.currency,
-#                         availability=p.availability,
-#                         product_url=p.product_url,
-#                         image_url=p.image_url
-#                     ) for p in products
-#                 ]
-                
-#                 return SearchResponse(products=formatted_products)
-#             else:
-#                 raise HTTPException(status_code=404, detail="No valid products found in the response")
-#         else:
-#             raise HTTPException(status_code=404, detail="No products data found in the response")
-
-
-#         # return SearchResponse(products=final_state.parsed_products)
-        
-#     except Exception as e:
-#         error_msg = f"Workflow execution error: {str(e)}\n{traceback.format_exc()}"
-#         print(f"❌ {error_msg}")
-#         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 @app.post("/search", response_model=SearchResponse)
 async def search_nike_shoes(request: SearchRequest):
@@ -358,4 +343,4 @@ async def search_nike_shoes(request: SearchRequest):
     except Exception as e:
         error_msg = f"Workflow execution error: {str(e)}\n{traceback.format_exc()}"
         print(f"❌ {error_msg}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: Something went wrong while processing your request. Please try again later.")

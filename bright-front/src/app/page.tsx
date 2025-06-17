@@ -7,7 +7,7 @@ interface ProductData {
   price: string;
   currency: string;
   availability: string;
-  source_url: string;
+  product_url: string;
 }
 
 interface SearchResponse {
@@ -57,15 +57,15 @@ export default function Home() {
     <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
       <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-2xl">
         <h1 className="text-3xl font-bold text-center text-gray-800 mb-6">
-          Luxury Item Search & Analysis
+          Search Nike Sneakers For Men
         </h1>
         <form onSubmit={handleSearch} className="flex flex-col gap-4">
           <input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="e.g., Rolex Submariner, Hermes Birkin bag"
-            className="p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            placeholder="e.g., Jordan, air max, etc."
+            className="p-3 border border-gray-300 rounded-md focus:ring-2 text-black focus:ring-blue-500 focus:border-transparent"
             disabled={loading}
           />
           <button
@@ -74,7 +74,7 @@ export default function Home() {
             className="bg-blue-600 text-white p-3 rounded-md hover:bg-blue-700 transition-colors disabled:bg-blue-400"
             disabled={loading}
           >
-            {loading ? 'Searching...' : 'Search Luxury Item'}
+            {loading ? 'Searching...' : 'Search Sneaker'}
           </button>
         </form>
 
@@ -96,12 +96,12 @@ export default function Home() {
                       <p className="text-gray-600">Price: {product.price} {product.currency}</p>
                       <p className="text-gray-600">Availability: {product.availability}</p>
                       <a
-                        href={product.source_url}
+                        href={product.product_url}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-blue-500 hover:underline text-sm mt-2 block"
                       >
-                        View Source
+                        View Product
                       </a>
                     </div>
                   ))}
