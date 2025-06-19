@@ -11,7 +11,7 @@ interface ProductData {
 }
 
 interface SearchResponse {
-  products: ProductData[];
+  products: Array<ProductData>;
   analysis_chart_base64?: string;
   analysis_summary?: string;
 }
@@ -45,8 +45,12 @@ export default function Home() {
       const data: SearchResponse = await response.json();
       console.log('Search results:', data);
       setResults(data);
-    } catch (err: any) {
-      setError(err.message || 'An unknown error occurred.');
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message || 'An unknown error occurred.');
+      } else {
+        setError('An unknown error occurred.');
+      }
     } finally {
       setLoading(false);
     }
