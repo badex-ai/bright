@@ -29,7 +29,7 @@ export default function Home() {
     setResults(null);
 
     try {
-      const response = await fetch('http://localhost:8000/search', { // Assuming FastAPI runs on 8000
+      const response = await fetch('https://bright-9vyw.onrender.com/search', { // Assuming FastAPI runs on 8000
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
