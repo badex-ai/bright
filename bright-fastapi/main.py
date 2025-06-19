@@ -115,27 +115,33 @@ async def scrape_with_tools_node(state: ScrapeProcessState) -> dict:
                     f"https://www.nike.com/w/mens-shoes-nik1zy7ok\n\n"
                     f"CRITICAL REQUIREMENTS:\n"
                     f"1. Do NOT use any search tools or scrape multiple pages\n"
-                    f"2. Focus on extracting these elements for each product:\n"
-                    f"   - Product name\n"
-                    f"   - Price\n"
-                    f"   - FULL product URL (look for href attributes containing '/t/' or full nike.com URLs)\n"
-                    f"   - Image URLs if available\n\n"
-                    f"3. When you find a product link, include the COMPLETE URL\n"
-                    f"4. If you see partial URLs starting with '/t/', convert them to full URLs by adding 'https://www.nike.com'\n\n"
-                    f"Query to match: {query_to_use}\n\n"
-                    f"Return the complete scraped markdown content including all URLs and links found."
+                    f"2. Extract Nike products that match these criteria:\n"
+                    f"   - Must be a footwear product from the men's shoes category\n"
+                    f"   - Must have a valid price in USD format\n"
+                    f"   - Must have a valid product URL pattern ('/t/' or 'nike.com')\n"
+                    f"3. IGNORE and DO NOT include:\n"
+                    f"   - Products without prices\n"
+                    f"   - Non-footwear items\n"
+                    f"   - Products without valid URLs\n"
+                    f"4. When you find a product link, include the COMPLETE URL\n"
+                    f"5. If you see partial URLs starting with '/t/', convert them to full URLs by adding 'https://www.nike.com'\n\n"
+                    f"Find products relevant to this search: {query_to_use}\n\n"
+                    f"Return ONLY relevant footwear products with complete information."
                 )
             )
         ]
 
         response = await agent.ainvoke({"messages": initial_messages})
 
-        if "messages" in response and response["messages"]:
-            last_message = response["messages"][-1]
-            scraped_content = last_message.content if hasattr(last_message, 'content') else str(last_message)
-        else:
-            scraped_content = "No response from agent"
+        if not response or not isinstance(response, dict) or "messages" not in response:
+            return {"error_message": "Invalid or empty response from agent"}
 
+        last_message = response["messages"][-1]
+        scraped_content = last_message.content if hasattr(last_message, 'content') else str(last_message)
+        
+        if not scraped_content or scraped_content.isspace():
+            return {"error_message": "No matching footwear products found"}
+            
         print(f"📄 Scraped content preview: {scraped_content[:200]}...")
         return {"scraped_data": scraped_content}
 
@@ -300,6 +306,10 @@ async def run_scraping(query: str):
         print(f"✅ Found {len(result.parsed_products)} products")
         return result.parsed_products
 
+
+@app.get("/")
+async def root():
+    return {"message": "Welcome to the FastAPI backend"}
 
 @app.post("/search", response_model=SearchResponse)
 async def search_nike_shoes(request: SearchRequest):
