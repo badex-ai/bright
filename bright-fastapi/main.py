@@ -20,17 +20,6 @@ load_dotenv()
 # --- FastAPI App Setup ---
 app = FastAPI()
 
-origins = [
-    "http://localhost:3000",
-]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 # Your existing models
 class ProductData(BaseModel):
@@ -328,6 +317,20 @@ async def run_scraping(query: str):
         print(f"✅ Found {len(result.parsed_products)} products")
         return result.parsed_products
 
+
+origins = [
+    "https://bright-two.vercel.app",  
+    "https://bright-git-main-alius-projects-2b75152a.vercel.app"
+]
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,  
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/")
 async def root():
