@@ -103,7 +103,8 @@ async def scrape_with_tools_node(state: ScrapeProcessState) -> dict:
     print("🔍 Scraping with MCP tools...")
     try:
         if not state.mcp_tools:
-            return {"error_message": "No MCP tools available for scraping"}
+            # Return empty scraped_data so parse_data_node will handle as "no products"
+            return {"scraped_data": ""}
 
         agent = create_react_agent(llm, state.mcp_tools)
         query_to_use = state.optimized_query or state.user_query
@@ -134,13 +135,15 @@ async def scrape_with_tools_node(state: ScrapeProcessState) -> dict:
         response = await agent.ainvoke({"messages": initial_messages})
 
         if not response or not isinstance(response, dict) or "messages" not in response:
-            return {"error_message": "Invalid or empty response from agent"}
+            # Return empty scraped_data so parse_data_node will handle as "no products"
+            return {"scraped_data": ""}
 
         last_message = response["messages"][-1]
         scraped_content = last_message.content if hasattr(last_message, 'content') else str(last_message)
         
         if not scraped_content or scraped_content.isspace():
-            return {"error_message": "No matching footwear products found"}
+            # Return empty scraped_data so parse_data_node will handle as "no products"
+            return {"scraped_data": ""}
             
         print(f"📄 Scraped content preview: {scraped_content[:200]}...")
         return {"scraped_data": scraped_content}
@@ -148,15 +151,19 @@ async def scrape_with_tools_node(state: ScrapeProcessState) -> dict:
     except Exception as e:
         error_msg = f"Failed to scrape data: {str(e)}\n{traceback.format_exc()}"
         print(f"❌ {error_msg}")
-        return {"error_message": error_msg}
+        # Return empty scraped_data so parse_data_node will handle as "no products"
+        return {"scraped_data": ""}
 
 
 async def parse_data_node(state: ScrapeProcessState) -> dict:
     """Parse the scraped data into structured products"""
     print("📊 Parsing scraped data...")
+
+    query_to_check = state.optimized_query or state.user_query
     
     if not state.scraped_data:
-        return {"error_message": "No scraped data to parse"}
+        # Return empty parsed_products list (not error) so /search returns "No valid products found"
+        return {"parsed_products": []}
     
     try:
         # Use Claude to structure the data with enhanced URL detection
@@ -208,6 +215,21 @@ async def parse_data_node(state: ScrapeProcessState) -> dict:
         - Only include products that have a clear name and price
         - Include ALL shoes mentioned in the data
 
+         IMPORTANT VALIDATION RULES:
+        - If the scraped content contains NO relevant Nike shoes for "{query_to_check}", return []
+        - If the scraped content is just navigation, headers, or generic text, return []
+        - If products have "N/A" prices or generic names, exclude them
+        - Be strict about relevance - better to return [] than irrelevant products
+        
+        EXAMPLES OF WHAT TO EXCLUDE:
+        - Generic entries like "Nike Footwear - General"
+        - Products with "N/A" or "$0" prices
+        - Navigation elements or category headers
+        - Products completely unrelated to the search query
+
+        Return ONLY a JSON array of relevant, valid products, or an empty array [] if none are found.
+        NO explanatory text, just the JSON array.
+
         Return ONLY a JSON array, no other text.
 
         Scraped content:
@@ -216,7 +238,7 @@ async def parse_data_node(state: ScrapeProcessState) -> dict:
 
         result = await llm.ainvoke([HumanMessage(content=parse_prompt)])
 
-        print(f"📦 Parsing result: {result.content[:200]}...")
+        print(f"📦 Parsing result: {result.content}...")
         
         # Clean and parse the JSON response
         response_content = result.content.strip()
@@ -324,13 +346,17 @@ async def search_nike_shoes(request: SearchRequest):
         # Check for errors first - use dictionary access
         if 'error_message' in final_state and final_state['error_message']:
             raise HTTPException(status_code=500, detail=f"Scraping or parsing failed: {final_state['error_message']}")
-
+        
         # Access parsed_products from the final state - use dictionary access
-        if 'parsed_products' in final_state and final_state['parsed_products']:
-            products = final_state['parsed_products']  # Fixed: removed extra brackets
+        if 'parsed_products' in final_state:
+            products = final_state['parsed_products']
             print(f"Found {len(products)} products in final state")
             
-            # Validate products format
+            # # Check if products is an empty array - return empty array
+            # if isinstance(products, list) and len(products) == 0:
+            #     return SearchResponse(products=[])
+            
+            # Validate products format for non-empty arrays
             if products and isinstance(products, list):
                 # Convert products to the expected format if needed
                 formatted_products = [
@@ -345,11 +371,9 @@ async def search_nike_shoes(request: SearchRequest):
                 ]
                 
                 return SearchResponse(products=formatted_products)
+            
             else:
-                raise HTTPException(status_code=404, detail="No valid products found in the response")
-        else:
-            raise HTTPException(status_code=404, detail="No products data found in the response")
-
+                return SearchResponse(products=[])
     except Exception as e:
         error_msg = f"Workflow execution error: {str(e)}\n{traceback.format_exc()}"
         print(f"❌ {error_msg}")
