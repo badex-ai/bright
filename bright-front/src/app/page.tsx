@@ -1,4 +1,4 @@
-'use client'; // This directive is needed for client-side components in Next.js App Router
+'use client'; 
 
 import { useState } from 'react';
 
@@ -28,8 +28,11 @@ export default function Home() {
     setError(null);
     setResults(null);
 
+    const apiUrl= process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'; 
+    
+
     try {
-      const response = await fetch('https://bright-9vyw.onrender.com/search', { // Assuming FastAPI runs on 8000
+      const response = await fetch(`${apiUrl}/search`, { 
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
