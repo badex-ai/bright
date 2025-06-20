@@ -22,13 +22,15 @@ export default function Home() {
   const [results, setResults] = useState<SearchResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+    const apiUrl= process.env.NEXT_PUBLIC_BACKEND_API || 'http://localhost:8000'; 
+
+
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
     setResults(null);
 
-    const apiUrl= process.env.backendApi || 'http://localhost:8000'; 
     
 
     try {
