@@ -28,7 +28,7 @@ export default function Home() {
     setError(null);
     setResults(null);
 
-    const apiUrl= process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'; 
+    const apiUrl= process.env.backendApi || 'http://localhost:8000'; 
     
 
     try {
